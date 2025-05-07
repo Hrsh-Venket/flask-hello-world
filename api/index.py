@@ -221,7 +221,7 @@ def get_google_services():
                     CREDENTIALS_PATH, 
                     SCOPES,
                     # Use device flow instead of browser
-                    redirect_uri='urn:ietf:wg:oauth:2.0:oob'
+                    redirect_uri='https://flask-hello-world-zeta-gules.vercel.app/auth'
                 )
                 auth_url, _ = flow.authorization_url(prompt='consent')
                 
@@ -463,7 +463,7 @@ def auth():
             flow = InstalledAppFlow.from_client_secrets_file(
                 CREDENTIALS_PATH, 
                 SCOPES,
-                redirect_uri='urn:ietf:wg:oauth:2.0:oob'
+                redirect_uri='https://flask-hello-world-zeta-gules.vercel.app/auth'
             )
             
             # Exchange the code for credentials
@@ -502,7 +502,7 @@ def auth():
                 flow = InstalledAppFlow.from_client_secrets_file(
                     CREDENTIALS_PATH, 
                     SCOPES,
-                    redirect_uri='urn:ietf:wg:oauth:2.0:oob'
+                    redirect_uri='https://flask-hello-world-zeta-gules.vercel.app/auth'
                 )
                 auth_url, _ = flow.authorization_url(prompt='consent')
                 session['auth_url'] = auth_url
