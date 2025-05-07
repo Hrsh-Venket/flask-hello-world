@@ -30,6 +30,7 @@ CREDENTIALS_PATH = 'credentials.json'
 PROMPT_FILE = 'prompt.txt'
 OUTPUT_EVENTS = 'events.json'
 GEMINI_MODEL = 'gemini-2.5-pro-exp-03-25'
+REDIRECT_URI = 'https://flask-hello-world-zeta-gules.vercel.app/auth'  # Updated redirect URI
 
 # --- Pydantic Model for Structured Output ---
 class CalendarEvent(BaseModel):
@@ -186,6 +187,7 @@ AUTH_TEMPLATE = '''
                 <ol>
                     <li>Click on the link below to open Google's authorization page</li>
                     <li>Sign in to your Google account and grant the requested permissions</li>
+                    <li>You will be redirected back automatically, but if that doesn't work:</li>
                     <li>Copy the authorization code provided by Google</li>
                     <li>Paste the code below and click Submit</li>
                 </ol>
@@ -194,7 +196,7 @@ AUTH_TEMPLATE = '''
             <h3>1. Open this link:</h3>
             <a href="{{ auth_url }}" target="_blank">{{ auth_url }}</a>
             
-            <h3>2. Enter the authorization code:</h3>
+            <h3>2. Or enter the authorization code if not automatically redirected:</h3>
             <form method="POST" action="/auth">
                 <input type="text" name="code" placeholder="Paste authorization code here" required>
                 <input type="submit" value="Submit">
@@ -207,7 +209,7 @@ AUTH_TEMPLATE = '''
 
 # --- Google API Authentication Functions ---
 def get_google_services():
-    """Authenticate and return Calendar and Tasks services with device flow support"""
+    """Authenticate and return Calendar and Tasks services with browser flow"""
     creds = None
     if os.path.exists(TOKEN_PATH):
         creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
@@ -215,13 +217,13 @@ def get_google_services():
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            # Try device flow first (better for headless servers)
+            # Use web flow for browser-based auth
             try:
                 flow = InstalledAppFlow.from_client_secrets_file(
                     CREDENTIALS_PATH, 
                     SCOPES,
-                    # Use device flow instead of browser
-                    redirect_uri='https://flask-hello-world-zeta-gules.vercel.app/auth'
+                    # Use proper redirect URI matching what's in Google Cloud Console
+                    redirect_uri=REDIRECT_URI
                 )
                 auth_url, _ = flow.authorization_url(prompt='consent')
                 
@@ -450,8 +452,47 @@ def home():
 @app.route('/auth', methods=['GET', 'POST'])
 def auth():
     """Handle OAuth authentication"""
-    if request.method == 'POST':
-        # Process the code from Google
+    # Handle direct callback from Google OAuth
+    if request.method == 'GET' and request.args.get('code'):
+        code = request.args.get('code')
+        try:
+            # Create flow and set redirect URI
+            flow = InstalledAppFlow.from_client_secrets_file(
+                CREDENTIALS_PATH, 
+                SCOPES,
+                redirect_uri=REDIRECT_URI
+            )
+            
+            # Exchange the code for credentials
+            flow.fetch_token(code=code)
+            creds = flow.credentials
+            
+            # Save tokens
+            with open(TOKEN_PATH, 'w') as token_file:
+                token_file.write(creds.to_json())
+                
+            # Also save as pickle for compatibility
+            with open(TOKEN_PICKLE, 'wb') as token_pickle:
+                pickle.dump(creds, token_pickle)
+                
+            # Clear the auth session data
+            session.pop('auth_url', None)
+            session.pop('auth_flow', None)
+            
+            # Add success message
+            session['messages'] = [{'type': 'success', 'text': 'Authentication successful!'}]
+            
+            # Redirect back to home
+            return redirect(url_for('home'))
+            
+        except Exception as e:
+            app.logger.error(f"Error in auth flow: {e}")
+            session['messages'] = [{'type': 'error', 'text': f"Authentication failed: {str(e)}"}]
+            return redirect(url_for('home'))
+    
+    # Handle form submission (for manual code entry as fallback)
+    elif request.method == 'POST':
+        # Process the code from form submission
         code = request.form.get('code')
         if not code:
             return render_template_string(AUTH_TEMPLATE, 
@@ -459,11 +500,11 @@ def auth():
                                          error="Authorization code is required")
         
         try:
-            # Create flow from client secrets and set redirect URI for offline access
+            # Create flow and set redirect URI
             flow = InstalledAppFlow.from_client_secrets_file(
                 CREDENTIALS_PATH, 
                 SCOPES,
-                redirect_uri='https://flask-hello-world-zeta-gules.vercel.app/auth'
+                redirect_uri=REDIRECT_URI
             )
             
             # Exchange the code for credentials
@@ -494,7 +535,7 @@ def auth():
                                          auth_url=session.get('auth_url', ''),
                                          error=f"Authentication failed: {str(e)}")
     else:
-        # GET request - show auth page
+        # GET request without code - show auth page
         # Check if we need to start the auth flow
         if not session.get('auth_url'):
             try:
@@ -502,7 +543,7 @@ def auth():
                 flow = InstalledAppFlow.from_client_secrets_file(
                     CREDENTIALS_PATH, 
                     SCOPES,
-                    redirect_uri='https://flask-hello-world-zeta-gules.vercel.app/auth'
+                    redirect_uri=REDIRECT_URI
                 )
                 auth_url, _ = flow.authorization_url(prompt='consent')
                 session['auth_url'] = auth_url
