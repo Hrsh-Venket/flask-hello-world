@@ -30,7 +30,10 @@ CREDENTIALS_PATH = 'credentials.json'
 PROMPT_FILE = 'prompt.txt'
 OUTPUT_EVENTS = 'events.json'
 GEMINI_MODEL = 'gemini-2.5-pro-exp-03-25'
-REDIRECT_URI = 'https://flask-hello-world-zeta-gules.vercel.app/auth'  # Updated redirect URI
+
+# FIXED: Make sure this EXACTLY matches one of the authorized redirect URIs
+# in your Google Cloud Console
+REDIRECT_URI = 'https://flask-hello-world-zeta-gules.vercel.app/auth'
 
 # --- Pydantic Model for Structured Output ---
 class CalendarEvent(BaseModel):
@@ -168,6 +171,7 @@ AUTH_TEMPLATE = '''
         input[type="submit"]:hover { background-color: #45a049; }
         .flash { padding: 10px; margin: 10px 0; border-radius: 5px; }
         .flash.error { background-color: #f2dede; color: #a94442; }
+        .auth-debug { margin-top: 20px; padding: 10px; background-color: #f5f5f5; border-radius: 4px; }
     </style>
 </head>
 <body>
@@ -201,6 +205,12 @@ AUTH_TEMPLATE = '''
                 <input type="text" name="code" placeholder="Paste authorization code here" required>
                 <input type="submit" value="Submit">
             </form>
+            
+            <!-- Debug info for troubleshooting -->
+            <div class="auth-debug">
+                <h4>Debug Information:</h4>
+                <p>Current Redirect URI: {{ redirect_uri }}</p>
+            </div>
         </div>
     </div>
 </body>
@@ -452,6 +462,9 @@ def home():
 @app.route('/auth', methods=['GET', 'POST'])
 def auth():
     """Handle OAuth authentication"""
+    # Debug the current redirect URI being used
+    app.logger.info(f"Using redirect URI: {REDIRECT_URI}")
+    
     # Handle direct callback from Google OAuth
     if request.method == 'GET' and request.args.get('code'):
         code = request.args.get('code')
@@ -497,6 +510,7 @@ def auth():
         if not code:
             return render_template_string(AUTH_TEMPLATE, 
                                          auth_url=session.get('auth_url', ''),
+                                         redirect_uri=REDIRECT_URI,
                                          error="Authorization code is required")
         
         try:
@@ -533,6 +547,7 @@ def auth():
             app.logger.error(f"Error in auth flow: {e}")
             return render_template_string(AUTH_TEMPLATE, 
                                          auth_url=session.get('auth_url', ''),
+                                         redirect_uri=REDIRECT_URI,
                                          error=f"Authentication failed: {str(e)}")
     else:
         # GET request without code - show auth page
@@ -551,10 +566,12 @@ def auth():
                 app.logger.error(f"Error starting auth flow: {e}")
                 return render_template_string(AUTH_TEMPLATE, 
                                              auth_url="",
+                                             redirect_uri=REDIRECT_URI,
                                              error=f"Error starting authentication: {str(e)}")
                 
         return render_template_string(AUTH_TEMPLATE, 
                                      auth_url=session.get('auth_url', ''),
+                                     redirect_uri=REDIRECT_URI,
                                      error=None)
 
 @app.route('/generate', methods=['POST'])
