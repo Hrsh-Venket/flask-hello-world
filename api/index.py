@@ -232,10 +232,14 @@ def get_google_services():
                 flow = InstalledAppFlow.from_client_secrets_file(
                     CREDENTIALS_PATH, 
                     SCOPES,
-                    # Use proper redirect URI matching what's in Google Cloud Console
+                    # FIXED: Use redirect_uri from constants and don't set it to oob
                     redirect_uri=REDIRECT_URI
                 )
-                auth_url, _ = flow.authorization_url(prompt='consent')
+                # FIXED: Set access_type to offline to get refresh token
+                auth_url, _ = flow.authorization_url(
+                    prompt='consent',
+                    access_type='offline'
+                )
                 
                 # Store the auth URL in session for the auth page
                 session['auth_url'] = auth_url
@@ -560,7 +564,11 @@ def auth():
                     SCOPES,
                     redirect_uri=REDIRECT_URI
                 )
-                auth_url, _ = flow.authorization_url(prompt='consent')
+                # FIXED: Set access_type to offline to get refresh token
+                auth_url, _ = flow.authorization_url(
+                    prompt='consent',
+                    access_type='offline'
+                )
                 session['auth_url'] = auth_url
             except Exception as e:
                 app.logger.error(f"Error starting auth flow: {e}")
